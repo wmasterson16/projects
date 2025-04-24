@@ -1,0 +1,1590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wyman's EDA Dashboard</title>
+    
+    <!-- Load D3.js and Chart.js - Using different CDN for Chart.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-cloud/1.2.5/d3.layout.cloud.min.js"></script>
+    
+    <!-- Add Bootstrap for styling -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+            padding-top: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .dashboard-title {
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+            border: none;
+            transition: transform 0.2s;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card-header {
+            background-color: #4b6cb7;
+            color: white;
+            font-weight: 600;
+            border-radius: 10px 10px 0 0 !important;
+            padding: 15px 20px;
+        }
+        
+        .card-body {
+            padding: 20px;
+            background-color: white;
+            border-radius: 0 0 10px 10px;
+        }
+        
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+        
+        .tab-content {
+            padding-top: 20px;
+        }
+        
+        .nav-tabs .nav-link {
+            color: #4b6cb7;
+            font-weight: 500;
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        
+        #wordcloud {
+            width: 100%;
+            height: 300px;
+        }
+        
+        .filter-section {
+            background-color: #eef2f7;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .loading-indicator {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            font-size: 1.2rem;
+            color: #4b6cb7;
+        }
+        
+        .stat-highlight {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #4b6cb7;
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-label {
+            font-size: 1rem;
+            color: #7f8c8d;
+            text-align: center;
+        }
+        
+        .segment-selector {
+            margin-bottom: 20px;
+        }
+        
+        .filter-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="dashboard-title">Wyman's EDA Dashboard</h1>
+        
+        <div class="filter-section">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="segment-selector">
+                        <label for="segmentFilter" class="form-label">Segment Data By:</label>
+                        <select id="segmentFilter" class="form-select">
+                            <option value="all">All Respondents</option>
+                            <option value="buys_frozen_fruit">Buyers vs. Non-Buyers</option>
+                            <option value="generation">Generation</option>
+                            <option value="region">Region</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-6" id="subfilterContainer" style="display: none;">
+                    <div class="segment-selector">
+                        <label for="subFilter" class="form-label">Filter:</label>
+                        <select id="subFilter" class="form-select">
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div id="currentFilterDisplay" style="display: none;">
+                <div class="filter-badge">
+                    Currently viewing: <span id="filterDescription">All Respondents</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tabs for different analysis sections -->
+        <ul class="nav nav-tabs" id="analysisTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="demographics-tab" data-bs-toggle="tab" 
+                        data-bs-target="#demographics" type="button" role="tab" 
+                        aria-controls="demographics" aria-selected="true">Demographics</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="segmentation-tab" data-bs-toggle="tab" 
+                        data-bs-target="#segmentation" type="button" role="tab" 
+                        aria-controls="segmentation" aria-selected="false">Buyer Segmentation</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="crosstabs-tab" data-bs-toggle="tab" 
+                        data-bs-target="#crosstabs" type="button" role="tab" 
+                        aria-controls="crosstabs" aria-selected="false">Cross-Tabs</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="feedback-tab" data-bs-toggle="tab" 
+                        data-bs-target="#feedback" type="button" role="tab" 
+                        aria-controls="feedback" aria-selected="false">Open-Ended Feedback</button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="analysisTabsContent">
+            <!-- Demographics Tab -->
+            <div class="tab-pane fade show active" id="demographics" role="tabpanel" aria-labelledby="demographics-tab">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Gender Distribution</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="genderChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Age Distribution</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="ageChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Regional Distribution</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="regionChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Income Distribution</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="incomeChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Education Level</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="educationChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Marital Status</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="maritalChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Segmentation Tab -->
+            <div class="tab-pane fade" id="segmentation" role="tabpanel" aria-labelledby="segmentation-tab">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Frozen Fruit Buyers vs. Non-Buyers</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="buyersPieChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Buyers by Generation</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="buyersByGenerationChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Frozen Fruit Purchase Frequency</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="purchaseFrequencyChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Buyers by Region</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="buyersByRegionChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Cross-Tabs Tab -->
+            <div class="tab-pane fade" id="crosstabs" role="tabpanel" aria-labelledby="crosstabs-tab">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Income × Buys Frozen Fruit</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="incomeBuyersChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Region × Product Preferences (Protein Blends)</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="regionPreferenceChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Generation × Buys Frozen Fruit</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="generationBuyersChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Region × Product Preferences (Fruit Poppers)</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="regionPopperPreferenceChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Open-Ended Feedback Tab -->
+            <div class="tab-pane fade" id="feedback" role="tabpanel" aria-labelledby="feedback-tab">
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">Word Cloud from Open-Ended Feedback</div>
+                            <div class="card-body">
+                                <div id="wordcloud" style="height: 300px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Top Keywords</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="keywordsChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Sentiment Analysis</div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="sentimentChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">Sample Feedback Comments</div>
+                            <div class="card-body">
+                                <div id="feedbackSamples">
+                                    <div class="list-group">
+                                        <div class="list-group-item">
+                                            <h6 class="mb-1">Response 1</h6>
+                                            <p class="mb-1">"I think the product would be popular its healthy but looks like it tastes good"</p>
+                                        </div>
+                                        <div class="list-group-item">
+                                            <h6 class="mb-1">Response 2</h6>
+                                            <p class="mb-1">"The products are nice looking and the protein is a great thing it looks very good I would buy it. I work out and I don't buy just anything. Good product and great price"</p>
+                                        </div>
+                                        <div class="list-group-item">
+                                            <h6 class="mb-1">Response 3</h6>
+                                            <p class="mb-1">"I'm always excited to try new food products, especially ones that are convenient and healthy. It would be great to see more options that cater to different dietary needs"</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Wait for Chart.js to load
+        window.onload = function() {
+            // Original data store (this will never be modified)
+            const originalData = {
+                // Demographics data
+                gender: {
+                    "Female": 1639,
+                    "Male": 1356,
+                    "Non-binary / other": 5
+                },
+                generation: {
+                    "18-27 Generation Z": 416,
+                    "28-43 Millennial": 896,
+                    "44-59 Generation X": 735,
+                    "60+ Baby Boomer / Silent": 953
+                },
+                region: {
+                    "South": 1184,
+                    "Midwest": 689,
+                    "Northeast": 596,
+                    "West": 531
+                },
+                income: {
+                    "$50,000-$99,999": 1022,
+                    "$25,000-$49,999": 626,
+                    "$100,000-$149,999": 553,
+                    "Less than $25,000": 450,
+                    "$150,000 or more": 349
+                },
+                education: {
+                    "Bachelor's degree": 842,
+                    "High school or less": 629,
+                    "Completed some college, but no degree": 566,
+                    "Graduate degree": 490,
+                    "Associate Degree": 366,
+                    "Vocational training/trade school": 104
+                },
+                maritalStatus: {
+                    "Married": 1374,
+                    "Single, never married": 987,
+                    "Divorced, separated, widowed": 428,
+                    "Living with partner": 205
+                },
+                
+                // Segmentation data
+                buysFrozenFruit: {
+                    "Yes": 2511,
+                    "No": 489
+                },
+                buyersByGeneration: {
+                    "18-27 Generation Z": { "Yes": 378, "No": 38 },
+                    "28-43 Millennial": { "Yes": 808, "No": 88 },
+                    "44-59 Generation X": { "Yes": 622, "No": 113 },
+                    "60+ Baby Boomer / Silent": { "Yes": 703, "No": 250 }
+                },
+                purchaseFrequency: {
+                    "Never": 489,
+                    "1-3 times": 576,
+                    "4-6 times": 517,
+                    "7-12 times": 690,
+                    "13-24 times": 445,
+                    "25 or more times": 283
+                },
+                buyersByRegion: {
+                    "South": { "Yes": 986, "No": 198 },
+                    "Midwest": { "Yes": 584, "No": 105 },
+                    "Northeast": { "Yes": 506, "No": 90 },
+                    "West": { "Yes": 435, "No": 96 }
+                },
+                
+                // Cross-tabs data
+                incomeByBuysFrozenFruit: {
+                    "$50,000-$99,999": { "Yes": 881, "No": 141 },
+                    "$25,000-$49,999": { "Yes": 527, "No": 99 },
+                    "$100,000-$149,999": { "Yes": 474, "No": 79 },
+                    "Less than $25,000": { "Yes": 338, "No": 112 },
+                    "$150,000 or more": { "Yes": 291, "No": 58 }
+                },
+                regionByProteinBlendPreference: {
+                    "South": {
+                        "Definitely would buy": 311,
+                        "Probably would buy": 301,
+                        "Might or might not buy": 326,
+                        "Probably would NOT buy": 137,
+                        "Definitely would NOT buy": 109
+                    },
+                    "Midwest": {
+                        "Definitely would buy": 168,
+                        "Probably would buy": 180,
+                        "Might or might not buy": 201,
+                        "Probably would NOT buy": 78,
+                        "Definitely would NOT buy": 62
+                    },
+                    "Northeast": {
+                        "Definitely would buy": 155,
+                        "Probably would buy": 152,
+                        "Might or might not buy": 163,
+                        "Probably would NOT buy": 69,
+                        "Definitely would NOT buy": 57
+                    },
+                    "West": {
+                        "Definitely would buy": 127,
+                        "Probably would buy": 139,
+                        "Might or might not buy": 154,
+                        "Probably would NOT buy": 58,
+                        "Definitely would NOT buy": 53
+                    }
+                },
+                generationByBuysFrozenFruit: {
+                    "18-27 Generation Z": { "Yes": 378, "No": 38 },
+                    "28-43 Millennial": { "Yes": 808, "No": 88 },
+                    "44-59 Generation X": { "Yes": 622, "No": 113 },
+                    "60+ Baby Boomer / Silent": { "Yes": 703, "No": 250 }
+                },
+                regionByFruitPopperPreference: {
+                    "South": {
+                        "Definitely would buy": 345,
+                        "Probably would buy": 313,
+                        "Might or might not buy": 307,
+                        "Probably would NOT buy": 121,
+                        "Definitely would NOT buy": 98
+                    },
+                    "Midwest": {
+                        "Definitely would buy": 188,
+                        "Probably would buy": 191,
+                        "Might or might not buy": 183,
+                        "Probably would NOT buy": 72,
+                        "Definitely would NOT buy": 55
+                    },
+                    "Northeast": {
+                        "Definitely would buy": 172,
+                        "Probably would buy": 165,
+                        "Might or might not buy": 151,
+                        "Probably would NOT buy": 59,
+                        "Definitely would NOT buy": 49
+                    },
+                    "West": {
+                        "Definitely would buy": 143,
+                        "Probably would buy": 147,
+                        "Might or might not buy": 146,
+                        "Probably would NOT buy": 50,
+                        "Definitely would NOT buy": 45
+                    }
+                },
+                
+                // Feedback data
+                keywords: {
+                    "products": 246,
+                    "good": 188,
+                    "try": 187,
+                    "new": 182,
+                    "look": 145,
+                    "great": 128,
+                    "thank": 123,
+                    "product": 104,
+                    "interesting": 94,
+                    "see": 82,
+                    "store": 76,
+                    "love": 68,
+                    "really": 68,
+                    "think": 60,
+                    "protein": 47
+                },
+                sentiment: {
+                    "Positive": 680,
+                    "Neutral": 1301,
+                    "Negative": 78
+                }
+            };
+            
+            // Working copy of data that will be filtered
+            let currentData = JSON.parse(JSON.stringify(originalData));
+            
+            // Chart objects
+            const charts = {};
+            
+            // Colors for charts
+            const colors = [
+                '#4b6cb7', '#8e44ad', '#27ae60', '#e67e22', '#e74c3c', 
+                '#f1c40f', '#1abc9c', '#e84393', '#3498db', '#2ecc71'
+            ];
+            
+            // Initialize the dashboard
+            initializeDashboard();
+            
+            function initializeDashboard() {
+                // Set up event listeners
+                document.getElementById('segmentFilter').addEventListener('change', function() {
+                    const segmentValue = this.value;
+                    updateSubfilters(segmentValue);
+                    applyFilters();
+                });
+                
+                // Create initial charts
+                createDemographicCharts();
+                createSegmentationCharts();
+                createCrosstabCharts();
+                createFeedbackCharts();
+            }
+            
+            // Update subfilters based on segment selection
+            function updateSubfilters(segmentValue) {
+                const subfilterContainer = document.getElementById('subfilterContainer');
+                const subfilterSelect = document.getElementById('subFilter');
+                
+                // Clear existing options
+                subfilterSelect.innerHTML = '';
+                
+                if (segmentValue === 'all') {
+                    subfilterContainer.style.display = 'none';
+                    document.getElementById('currentFilterDisplay').style.display = 'none';
+                    return;
+                }
+                
+                subfilterContainer.style.display = 'block';
+                document.getElementById('currentFilterDisplay').style.display = 'block';
+                
+                // Add appropriate options based on segment
+                if (segmentValue === 'buys_frozen_fruit') {
+                    addOption(subfilterSelect, 'Yes', 'Yes');
+                    addOption(subfilterSelect, 'No', 'No');
+                } 
+                else if (segmentValue === 'generation') {
+                    addOption(subfilterSelect, 'All Generations', 'all');
+                    addOption(subfilterSelect, 'Gen Z (18-27)', '18-27 Generation Z');
+                    addOption(subfilterSelect, 'Millennials (28-43)', '28-43 Millennial');
+                    addOption(subfilterSelect, 'Gen X (44-59)', '44-59 Generation X');
+                    addOption(subfilterSelect, 'Baby Boomers/Silent (60+)', '60+ Baby Boomer / Silent');
+                }
+                else if (segmentValue === 'region') {
+                    addOption(subfilterSelect, 'All Regions', 'all');
+                    addOption(subfilterSelect, 'Northeast', 'Northeast');
+                    addOption(subfilterSelect, 'Midwest', 'Midwest');
+                    addOption(subfilterSelect, 'South', 'South');
+                    addOption(subfilterSelect, 'West', 'West');
+                }
+                
+                // Add listener for subfilter changes
+                subfilterSelect.addEventListener('change', function() {
+                    applyFilters();
+                });
+            }
+            
+            // Helper function to add an option to a select element
+            function addOption(selectElement, text, value) {
+                const option = document.createElement('option');
+                option.text = text;
+                option.value = value;
+                selectElement.add(option);
+            }
+            
+            // Apply filters and update all charts
+            function applyFilters() {
+                const segmentType = document.getElementById('segmentFilter').value;
+                const subfilterElement = document.getElementById('subFilter');
+                const subFilter = subfilterElement ? subfilterElement.value : 'all';
+                
+                // Reset working data to original
+                currentData = JSON.parse(JSON.stringify(originalData));
+                
+                // Update filter description
+                updateFilterDescription(segmentType, subFilter);
+                
+                // If no segment is selected, use all data
+                if (segmentType === 'all') {
+                    // Refresh all charts with the original data
+                    updateAllCharts();
+                    return;
+                }
+                
+                // Filter the data based on segment type and subfilter
+                if (segmentType === 'buys_frozen_fruit') {
+                    filterByBuysFrozenFruit(subFilter);
+                } 
+                else if (segmentType === 'generation') {
+                    filterByGeneration(subFilter);
+                }
+                else if (segmentType === 'region') {
+                    filterByRegion(subFilter);
+                }
+                
+                // Update all charts with filtered data
+                updateAllCharts();
+            }
+            
+            // Update filter description
+            function updateFilterDescription(segmentType, subFilter) {
+                const filterDescription = document.getElementById('filterDescription');
+                
+                if (segmentType === 'all') {
+                    filterDescription.textContent = 'All Respondents';
+                    return;
+                }
+                
+                let description = '';
+                
+                if (segmentType === 'buys_frozen_fruit') {
+                    description = subFilter === 'Yes' ? 'Frozen Fruit Buyers' : 'Non-Buyers';
+                } 
+                else if (segmentType === 'generation') {
+                    if (subFilter === 'all') {
+                        description = 'All Generations';
+                    } else {
+                        description = subFilter;
+                    }
+                }
+                else if (segmentType === 'region') {
+                    if (subFilter === 'all') {
+                        description = 'All Regions';
+                    } else {
+                        description = subFilter + ' Region';
+                    }
+                }
+                
+                filterDescription.textContent = description;
+            }
+            
+            // Filter data by "Buys Frozen Fruit"
+            function filterByBuysFrozenFruit(buyerStatus) {
+                // For buyersByGeneration, buyersByRegion, etc. - only keep selected buyer status
+                const buyerDataSets = ['buyersByGeneration', 'buyersByRegion', 'incomeByBuysFrozenFruit', 'generationByBuysFrozenFruit'];
+                
+                buyerDataSets.forEach(dataset => {
+                    for (const category in currentData[dataset]) {
+                        // Keep only the selected buyer status for each category
+                        const selected = currentData[dataset][category][buyerStatus];
+                        currentData[dataset][category] = { [buyerStatus]: selected };
+                    }
+                });
+                
+                // Filter purchase frequency - for Yes buyers, remove "Never"; for No buyers, keep only "Never"
+                if (buyerStatus === 'Yes') {
+                    delete currentData.purchaseFrequency.Never;
+                } else {
+                    // Keep only "Never" frequency for non-buyers
+                    currentData.purchaseFrequency = { "Never": currentData.purchaseFrequency.Never };
+                }
+                
+                // Update demographics proportionally based on buyer status
+                // Calculate what percentage of total respondents are in this buyer category
+                const totalRespondents = originalData.buysFrozenFruit.Yes + originalData.buysFrozenFruit.No;
+                const selectedBuyerCount = originalData.buysFrozenFruit[buyerStatus];
+                const buyerPercentage = selectedBuyerCount / totalRespondents;
+                
+                // Scale demographic data
+                const demographicDataSets = ['gender', 'generation', 'region', 'income', 'education', 'maritalStatus'];
+                demographicDataSets.forEach(dataset => {
+                    for (const category in currentData[dataset]) {
+                        // Scale value based on buyer percentage
+                        currentData[dataset][category] = Math.round(currentData[dataset][category] * buyerPercentage);
+                    }
+                });
+                
+                // Update buyers pie chart to show only selected status
+                currentData.buysFrozenFruit = { [buyerStatus]: selectedBuyerCount };
+            }
+            
+            // Filter data by Generation
+            function filterByGeneration(generation) {
+                if (generation === 'all') {
+                    // No further filtering needed if "All Generations" is selected
+                    return;
+                }
+                
+                // Filter generation-specific data to show only the selected generation
+                // Update buyersByGeneration and generationByBuysFrozenFruit
+                const generationDataSets = ['buyersByGeneration', 'generationByBuysFrozenFruit'];
+                generationDataSets.forEach(dataset => {
+                    const selectedGenData = currentData[dataset][generation];
+                    currentData[dataset] = { [generation]: selectedGenData };
+                });
+                
+                // Update generation chart to show only selected generation
+                const generationCount = currentData.generation[generation];
+                currentData.generation = { [generation]: generationCount };
+                
+                // Calculate what percentage of total respondents are in this generation
+                const totalRespondents = Object.values(originalData.generation).reduce((sum, val) => sum + val, 0);
+                const generationPercentage = generationCount / totalRespondents;
+                
+                // Scale other demographic data
+                const demographicDataSets = ['gender', 'region', 'income', 'education', 'maritalStatus', 'purchaseFrequency'];
+                demographicDataSets.forEach(dataset => {
+                    for (const category in currentData[dataset]) {
+                        // Scale value based on generation percentage
+                        currentData[dataset][category] = Math.round(currentData[dataset][category] * generationPercentage);
+                    }
+                });
+                
+                // Update buyer percentages based on this generation's buying behavior
+                const buyersInGeneration = originalData.generationByBuysFrozenFruit[generation].Yes;
+                const nonBuyersInGeneration = originalData.generationByBuysFrozenFruit[generation].No;
+                currentData.buysFrozenFruit = {
+                    "Yes": buyersInGeneration,
+                    "No": nonBuyersInGeneration
+                };
+            }
+            
+            // Filter data by Region
+            function filterByRegion(region) {
+                if (region === 'all') {
+                    // No further filtering needed if "All Regions" is selected
+                    return;
+                }
+                
+                // Filter region-specific data
+                const regionData = currentData.region[region];
+                currentData.region = { [region]: regionData };
+                
+                // Update buyersByRegion
+                const regionBuyerData = currentData.buyersByRegion[region];
+                currentData.buyersByRegion = { [region]: regionBuyerData };
+                
+                // Update product preferences by region
+                const regionPreferenceData = currentData.regionByProteinBlendPreference[region];
+                currentData.regionByProteinBlendPreference = { [region]: regionPreferenceData };
+                
+                const regionPopperData = currentData.regionByFruitPopperPreference[region];
+                currentData.regionByFruitPopperPreference = { [region]: regionPopperData };
+                
+                // Calculate what percentage of total respondents are in this region
+                const totalRespondents = Object.values(originalData.region).reduce((sum, val) => sum + val, 0);
+                const regionPercentage = regionData / totalRespondents;
+                
+                // Scale other demographic data
+                const demographicDataSets = ['gender', 'generation', 'income', 'education', 'maritalStatus', 'purchaseFrequency'];
+                demographicDataSets.forEach(dataset => {
+                    for (const category in currentData[dataset]) {
+                        // Scale value based on region percentage
+                        currentData[dataset][category] = Math.round(currentData[dataset][category] * regionPercentage);
+                    }
+                });
+                
+                // Update buyer percentages based on this region's buying behavior
+                const buyersInRegion = originalData.buyersByRegion[region].Yes;
+                const nonBuyersInRegion = originalData.buyersByRegion[region].No;
+                currentData.buysFrozenFruit = {
+                    "Yes": buyersInRegion,
+                    "No": nonBuyersInRegion
+                };
+            }
+            
+            // Update all charts with the current data
+            function updateAllCharts() {
+                // Update demographic charts
+                updateChart('genderChart');
+                updateChart('ageChart');
+                updateChart('regionChart');
+                updateChart('incomeChart');
+                updateChart('educationChart');
+                updateChart('maritalChart');
+                
+                // Update segmentation charts
+                updateChart('buyersPieChart');
+                updateStackedChart('buyersByGenerationChart');
+                updateChart('purchaseFrequencyChart');
+                updateStackedChart('buyersByRegionChart');
+                
+                // Update crosstab charts
+                updateStackedChart('incomeBuyersChart');
+                updateGroupedChart('regionPreferenceChart');
+                updateStackedChart('generationBuyersChart');
+                updateGroupedChart('regionPopperPreferenceChart');
+                
+                // Update feedback charts
+                updateChart('keywordsChart');
+                updateChart('sentimentChart');
+                updateWordCloud();
+            }
+            
+            // Helper function to update a standard chart
+            function updateChart(chartId) {
+                if (!charts[chartId]) return;
+                
+                // Get the chart's data key
+                const dataKey = getDataKeyForChart(chartId);
+                if (!dataKey) return;
+                
+                // Update the chart with new data
+                const data = currentData[dataKey];
+                const labels = Object.keys(data);
+                const values = Object.values(data);
+                
+                charts[chartId].data.labels = labels;
+                charts[chartId].data.datasets[0].data = values;
+                charts[chartId].update();
+            }
+            
+            // Helper function to update a stacked bar chart
+            function updateStackedChart(chartId) {
+                if (!charts[chartId]) return;
+                
+                // Get the chart's data key
+                const dataKey = getDataKeyForChart(chartId);
+                if (!dataKey) return;
+                
+                const data = currentData[dataKey];
+                const categories = Object.keys(data);
+                
+                // If there's no data, display empty chart
+                if (categories.length === 0) {
+                    charts[chartId].data.labels = ['No Data Available'];
+                    charts[chartId].data.datasets = [{
+                        label: 'No Data',
+                        data: [0],
+                        backgroundColor: '#cccccc'
+                    }];
+                    charts[chartId].update();
+                    return;
+                }
+                
+                // Get stack values from first category
+                const firstCategory = data[categories[0]];
+                if (!firstCategory || typeof firstCategory !== 'object') {
+                    charts[chartId].data.labels = ['No Data Available'];
+                    charts[chartId].data.datasets = [{
+                        label: 'No Data',
+                        data: [0],
+                        backgroundColor: '#cccccc'
+                    }];
+                    charts[chartId].update();
+                    return;
+                }
+                
+                const stackValues = Object.keys(firstCategory);
+                
+                // Create datasets
+                const datasets = stackValues.map((stack, index) => ({
+                    label: stack,
+                    data: categories.map(category => data[category][stack] || 0),
+                    backgroundColor: index === 0 ? '#27ae60' : '#e74c3c',
+                    borderWidth: 1
+                }));
+                
+                // Update chart
+                charts[chartId].data.labels = categories;
+                charts[chartId].data.datasets = datasets;
+                charts[chartId].update();
+            }
+            
+            // Helper function to update a grouped bar chart
+            function updateGroupedChart(chartId) {
+                if (!charts[chartId]) return;
+                
+                // Get the chart's data key
+                const dataKey = getDataKeyForChart(chartId);
+                if (!dataKey) return;
+                
+                const data = currentData[dataKey];
+                const categories = Object.keys(data);
+                
+                // If there's no data, display empty chart
+                if (categories.length === 0) {
+                    charts[chartId].data.labels = ['No Data Available'];
+                    charts[chartId].data.datasets = [{
+                        label: 'No Data',
+                        data: [0],
+                        backgroundColor: '#cccccc'
+                    }];
+                    charts[chartId].update();
+                    return;
+                }
+                
+                // Get group values from first category
+                const firstCategory = data[categories[0]];
+                if (!firstCategory || typeof firstCategory !== 'object') {
+                    charts[chartId].data.labels = ['No Data Available'];
+                    charts[chartId].data.datasets = [{
+                        label: 'No Data',
+                        data: [0],
+                        backgroundColor: '#cccccc'
+                    }];
+                    charts[chartId].update();
+                    return;
+                }
+                
+                const groupValues = Object.keys(firstCategory);
+                
+                // For readability, limit to only showing the top preferences
+                // "Definitely would buy", "Probably would buy", "Might or might not buy"
+                const topGroupValues = groupValues.slice(0, 3);
+                
+                // Create datasets
+                const datasets = topGroupValues.map((group, index) => ({
+                    label: group.length > 15 ? group.substring(0, 15) + '...' : group,
+                    data: categories.map(category => data[category][group] || 0),
+                    backgroundColor: colors[index % colors.length],
+                    borderWidth: 1
+                }));
+                
+                // Update chart
+                charts[chartId].data.labels = categories;
+                charts[chartId].data.datasets = datasets;
+                charts[chartId].update();
+            }
+            
+            // Get data key for a specific chart ID
+            function getDataKeyForChart(chartId) {
+                const chartDataKeys = {
+                    'genderChart': 'gender',
+                    'ageChart': 'generation',
+                    'regionChart': 'region',
+                    'incomeChart': 'income',
+                    'educationChart': 'education',
+                    'maritalChart': 'maritalStatus',
+                    'buyersPieChart': 'buysFrozenFruit',
+                    'buyersByGenerationChart': 'buyersByGeneration',
+                    'purchaseFrequencyChart': 'purchaseFrequency',
+                    'buyersByRegionChart': 'buyersByRegion',
+                    'incomeBuyersChart': 'incomeByBuysFrozenFruit',
+                    'regionPreferenceChart': 'regionByProteinBlendPreference',
+                    'generationBuyersChart': 'generationByBuysFrozenFruit',
+                    'regionPopperPreferenceChart': 'regionByFruitPopperPreference',
+                    'keywordsChart': 'keywords',
+                    'sentimentChart': 'sentiment'
+                };
+                
+                return chartDataKeys[chartId];
+            }
+            
+            // ===== CHART CREATION FUNCTIONS =====
+            
+            // Create demographic charts
+            function createDemographicCharts() {
+                // Gender chart
+                createHorizontalBarChart('genderChart', 'gender', ['#4b6cb7', '#e84393', '#8e44ad']);
+                
+                // Age/Generation chart
+                createBarChart('ageChart', 'generation', 'Age Group Distribution', colors.slice(0, 4));
+                
+                // Region chart
+                createBarChart('regionChart', 'region', 'Regional Distribution', colors.slice(3, 7));
+                
+                // Income chart
+                createBarChart('incomeChart', 'income', 'Income Distribution', colors.slice(0, 5));
+                
+                // Education chart
+                createBarChart('educationChart', 'education', 'Education Level', colors.slice(2, 9));
+                
+                // Marital Status chart
+                createHorizontalBarChart('maritalChart', 'maritalStatus', colors.slice(1, 6));
+            }
+            
+            // Create segmentation charts
+            function createSegmentationCharts() {
+                // Buyers vs Non-Buyers Chart
+                createPieChart('buyersPieChart', 'buysFrozenFruit', ['#27ae60', '#e74c3c']);
+                
+                // Buyers by Generation
+                createStackedBarChart('buyersByGenerationChart', 'buyersByGeneration', ['#27ae60', '#e74c3c']);
+                
+                // Purchase Frequency
+                createBarChart('purchaseFrequencyChart', 'purchaseFrequency', 'Purchase Frequency (Past 12 Months)', colors.slice(0, 6));
+                
+                // Buyers by Region
+                createStackedBarChart('buyersByRegionChart', 'buyersByRegion', ['#27ae60', '#e74c3c']);
+            }
+            
+            // Create crosstab charts
+            function createCrosstabCharts() {
+                // Income × Buys Frozen Fruit
+                createStackedBarChart('incomeBuyersChart', 'incomeByBuysFrozenFruit', ['#27ae60', '#e74c3c']);
+                
+                // Region × Product Preferences (Protein Blends)
+                createGroupedBarChart('regionPreferenceChart', 'regionByProteinBlendPreference', colors);
+                
+                // Generation × Buys Frozen Fruit
+                createStackedBarChart('generationBuyersChart', 'generationByBuysFrozenFruit', ['#27ae60', '#e74c3c']);
+                
+                // Region × Product Preferences (Fruit Poppers)
+                createGroupedBarChart('regionPopperPreferenceChart', 'regionByFruitPopperPreference', colors);
+            }
+            
+            // Create feedback analysis charts
+            function createFeedbackCharts() {
+                // Word cloud
+                createWordCloud();
+                
+                // Keywords chart
+                createKeywordsChart();
+                
+                // Sentiment chart
+                createSentimentChart();
+            }
+            
+            // Create a horizontal bar chart
+            function createHorizontalBarChart(canvasId, dataKey, colorPalette) {
+                const ctx = document.getElementById(canvasId).getContext('2d');
+                
+                const data = currentData[dataKey];
+                const labels = Object.keys(data);
+                const values = Object.values(data);
+                
+                charts[canvasId] = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: colorPalette.slice(0, labels.length),
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = context.formattedValue;
+                                        const total = values.reduce((a, b) => a + b, 0);
+                                        const percentage = (context.raw / total * 100).toFixed(1);
+                                        return `${context.label}: ${value} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Count'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Create a standard bar chart
+            function createBarChart(canvasId, dataKey, title, colorPalette) {
+                const ctx = document.getElementById(canvasId).getContext('2d');
+                
+                const data = currentData[dataKey];
+                const labels = Object.keys(data);
+                const values = Object.values(data);
+                
+                charts[canvasId] = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: title,
+                            data: values,
+                            backgroundColor: colorPalette.slice(0, labels.length),
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = context.formattedValue;
+                                        const total = values.reduce((a, b) => a + b, 0);
+                                        const percentage = (context.raw / total * 100).toFixed(1);
+                                        return `${value} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Count'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Create a pie chart
+            function createPieChart(canvasId, dataKey, colorPalette) {
+                const ctx = document.getElementById(canvasId).getContext('2d');
+                
+                const data = currentData[dataKey];
+                const labels = Object.keys(data);
+                const values = Object.values(data);
+                
+                charts[canvasId] = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: colorPalette,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = context.formattedValue;
+                                        const total = values.reduce((a, b) => a + b, 0);
+                                        const percentage = (context.raw / total * 100).toFixed(1);
+                                        return `${context.label}: ${value} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Create a stacked bar chart
+            function createStackedBarChart(canvasId, dataKey, colorPalette) {
+                const ctx = document.getElementById(canvasId).getContext('2d');
+                
+                const data = currentData[dataKey];
+                const categories = Object.keys(data);
+                
+                if (categories.length === 0) {
+                    charts[canvasId] = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['No Data Available'],
+                            datasets: [{
+                                label: 'No Data',
+                                data: [0],
+                                backgroundColor: '#cccccc'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                    return;
+                }
+                
+                // Get stack values (assuming all categories have the same stack values)
+                const firstCategory = data[categories[0]];
+                if (!firstCategory || typeof firstCategory !== 'object') {
+                    charts[canvasId] = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['No Data Available'],
+                            datasets: [{
+                                label: 'No Data',
+                                data: [0],
+                                backgroundColor: '#cccccc'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                    return;
+                }
+                
+                const stackValues = Object.keys(firstCategory);
+                
+                // Create datasets
+                const datasets = stackValues.map((stack, index) => ({
+                    label: stack,
+                    data: categories.map(category => data[category][stack] || 0),
+                    backgroundColor: colorPalette[index % colorPalette.length],
+                    borderWidth: 1
+                }));
+                
+                charts[canvasId] = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: categories,
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.dataset.label || '';
+                                        const value = context.formattedValue;
+                                        
+                                        // Calculate the total for this category
+                                        const categoryIndex = context.dataIndex;
+                                        const category = categories[categoryIndex];
+                                        const categoryTotal = stackValues.reduce((total, stack) => {
+                                            return total + (data[category][stack] || 0);
+                                        }, 0);
+                                        
+                                        const percentage = (context.raw / categoryTotal * 100).toFixed(1);
+                                        return `${label}: ${value} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                stacked: true
+                            },
+                            y: {
+                                stacked: true,
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Count'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Create a grouped bar chart
+            function createGroupedBarChart(canvasId, dataKey, colorPalette) {
+                const ctx = document.getElementById(canvasId).getContext('2d');
+                
+                const data = currentData[dataKey];
+                const categories = Object.keys(data);
+                
+                if (categories.length === 0) {
+                    charts[canvasId] = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['No Data Available'],
+                            datasets: [{
+                                label: 'No Data',
+                                data: [0],
+                                backgroundColor: '#cccccc'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                    return;
+                }
+                
+                // Get group values (assuming all categories have the same group values)
+                const firstCategory = data[categories[0]];
+                if (!firstCategory || typeof firstCategory !== 'object') {
+                    charts[canvasId] = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['No Data Available'],
+                            datasets: [{
+                                label: 'No Data',
+                                data: [0],
+                                backgroundColor: '#cccccc'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                    return;
+                }
+                
+                const groupValues = Object.keys(firstCategory);
+                
+                // For simplicity, show only top 3 preferences
+                const topGroupValues = groupValues.slice(0, 3);
+                
+                // Create datasets
+                const datasets = topGroupValues.map((group, index) => ({
+                    label: group.length > 15 ? group.substring(0, 15) + '...' : group,
+                    data: categories.map(category => data[category][group] || 0),
+                    backgroundColor: colorPalette[index % colorPalette.length],
+                    borderWidth: 1
+                }));
+                
+                charts[canvasId] = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: categories,
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Count'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Create keywords chart (horizontal bar chart)
+            function createKeywordsChart() {
+                const ctx = document.getElementById('keywordsChart').getContext('2d');
+                
+                const wordFreqData = currentData.keywords;
+                const words = Object.keys(wordFreqData);
+                const frequencies = Object.values(wordFreqData);
+                
+                // Sort by frequency
+                const pairs = words.map((word, i) => ({ word, freq: frequencies[i] }))
+                    .sort((a, b) => b.freq - a.freq)
+                    .slice(0, 10); // Show top 10 for readability
+                
+                const sortedWords = pairs.map(p => p.word);
+                const sortedFreqs = pairs.map(p => p.freq);
+                
+                charts.keywordsChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: sortedWords,
+                        datasets: [{
+                            label: 'Frequency',
+                            data: sortedFreqs,
+                            backgroundColor: colors.slice(0, sortedWords.length),
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Count'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Create sentiment chart
+            function createSentimentChart() {
+                const ctx = document.getElementById('sentimentChart').getContext('2d');
+                
+                const sentimentData = currentData.sentiment;
+                const labels = Object.keys(sentimentData);
+                const values = Object.values(sentimentData);
+                
+                charts.sentimentChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Sentiment Count',
+                            data: values,
+                            backgroundColor: ['#27ae60', '#f1c40f', '#e74c3c'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = context.formattedValue;
+                                        const total = values.reduce((a, b) => a + b, 0);
+                                        const percentage = (context.raw / total * 100).toFixed(1);
+                                        return `${context.label}: ${value} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Count'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Create word cloud
+            function createWordCloud() {
+                // Word cloud data
+                const wordFreqData = currentData.keywords;
+                const words = Object.keys(wordFreqData).map(word => ({
+                    text: word,
+                    size: Math.log(wordFreqData[word]) * 10 + 10 // Scale for better visualization
+                }));
+                
+                // Create word cloud
+                const width = document.getElementById('wordcloud').clientWidth;
+                const height = document.getElementById('wordcloud').clientHeight;
+                
+                // Clear any existing SVG
+                d3.select('#wordcloud').select('svg').remove();
+                
+                // Create new SVG
+                const svg = d3.select('#wordcloud')
+                    .append('svg')
+                    .attr('width', width)
+                    .attr('height', height);
+                    
+                // Generate the word cloud layout
+                const cloud = d3.layout.cloud()
+                    .size([width, height])
+                    .words(words)
+                    .padding(5)
+                    .rotate(() => ~~(Math.random() * 2) * 90)
+                    .fontSize(d => d.size)
+                    .on('end', draw);
+                    
+                cloud.start();
+                
+                // Function to draw the word cloud
+                function draw(words) {
+                    svg.append('g')
+                        .attr('transform', `translate(${width / 2},${height / 2})`)
+                        .selectAll('text')
+                        .data(words)
+                        .enter().append('text')
+                        .style('font-size', d => `${d.size}px`)
+                        .style('font-family', 'Impact')
+                        .style('fill', (d, i) => colors[i % colors.length])
+                        .attr('text-anchor', 'middle')
+                        .attr('transform', d => `translate(${d.x},${d.y}) rotate(${d.rotate})`)
+                        .text(d => d.text);
+                }
+            }
+            
+            // Update word cloud
+            function updateWordCloud() {
+                createWordCloud(); // Re-create with filtered data
+            }
+        };
+    </script>
+</body>
+</html>
